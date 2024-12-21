@@ -1,9 +1,0 @@
-streamlit
-fastapi
-pydantic
-pandas
-scikit-learn
-joblib
-requests
-uvicorn
-mlflows
