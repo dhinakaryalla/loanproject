@@ -1,23 +1,60 @@
+# Import necessary libraries
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
-import joblib
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+from xgboost import XGBClassifier
 import pandas as pd
+import joblib
 import logging
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Load the trained model
-model_path = "final_model.joblib"
+# Paths
+MODEL_PATH = "final_model.joblib"
+DATA_PATH = "your_dataset.csv"  # Replace with your actual dataset file
+
+# Train and Save Model Function
+def train_and_save_model():
+    try:
+        # Load dataset
+        logger.info("Loading dataset...")
+        data = pd.read_csv(DATA_PATH)
+        X = data.drop(columns=["target"])  # Replace 'target' with the name of your target column
+        y = data["target"]
+
+        # Split the data
+        logger.info("Splitting data into train and test sets...")
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+        # Train the model
+        logger.info("Training the XGBoost model...")
+        model = XGBClassifier(random_state=42)
+        model.fit(X_train, y_train)
+
+        # Evaluate the model
+        y_pred = model.predict(X_test)
+        accuracy = accuracy_score(y_test, y_pred)
+        logger.info(f"Model Accuracy: {accuracy:.2f}")
+
+        # Save the trained model
+        joblib.dump(model, MODEL_PATH)
+        logger.info(f"Model saved at {MODEL_PATH}")
+    except Exception as e:
+        logger.error(f"Error training or saving the model: {e}")
+        raise RuntimeError(f"Failed to train and save model: {e}")
+
+# Train and save the model if it does not already exist
 try:
-    model = joblib.load(model_path)
-    if not hasattr(model, "predict") or not hasattr(model, "predict_proba"):
-        raise ValueError("Loaded model does not have necessary methods (predict/predict_proba).")
+    logger.info("Checking for existing model...")
+    model = joblib.load(MODEL_PATH)
     logger.info("Model loaded successfully.")
 except Exception as e:
-    logger.error(f"Failed to load the model: {e}")
-    raise RuntimeError(f"Model loading failed: {e}")
+    logger.warning("Model not found or failed to load. Training a new model...")
+    train_and_save_model()
+    model = joblib.load(MODEL_PATH)
 
 # Define FastAPI app
 app = FastAPI(
@@ -61,7 +98,7 @@ async def predict(application: LoanApplication):
         # Map prediction to label
         loan_status = "Approved" if prediction == 1 else "Denied"
 
-        logger.info(f"Prediction: {loan_status}, Probability: {probability}")
+        logger.info(f"Prediction: {loan_status}, Probability: {probability:.2f}")
         return Prediction(loan_status=loan_status, probability=probability)
     except ValueError as ve:
         logger.error(f"Value error during prediction: {ve}")
